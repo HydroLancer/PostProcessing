@@ -23,23 +23,29 @@ SamplerState PointSample  : register(s0); // We don't usually want to filter (bi
 // Post-processing shader that tints the scene texture to a given colour
 float4 main(PostProcessingInput input) : SV_Target
 {
-	// Get vector from screen centre to pixel UV
-	const float2 centreUV = float2(0.5f, 0.5f);
-	float2 centreOffsetUV = input.uv/*FILTER - not 0, read comment*/ - centreUV;
-	float centreDistance = length(centreOffsetUV); // Distance of pixel from screen centre
+	float3 colour1 = SceneTexture.Sample(PointSample, input.uv).rgb;
+	float2 offsetUV;
 	
-	// Get sin and cos of spiral amount, increasing with distance from centre
-	float s, c;
-	sincos( centreDistance * gSpiralLevel * gSpiralLevel, s, c );
-	
-	// Create a (2D) rotation matrix and apply to the vector - i.e. rotate the
-	// vector around the centre by the spiral amount
-	matrix<float,2,2> rot2D = { c, s,
-	                           -s, c/*FILTER - not 0, it's a 2D rotation matrix...?*/ };
-	float2 rotatedOffsetUV = mul(centreOffsetUV, rot2D);
+	offsetUV = input.uv + float2(1 / gViewportWidth, 0);
+	float3 Right = SceneTexture.Sample(PointSample, offsetUV).rgb;
+	offsetUV = input.uv + float2(-1 / gViewportWidth, 0);
+	float3 Left = SceneTexture.Sample(PointSample, offsetUV).rgb;
+	offsetUV = input.uv + float2(0, -1 /gViewportHeight);
+	float3 Down = SceneTexture.Sample(PointSample, offsetUV).rgb;
+	offsetUV = input.uv + float2(0, 1 / gViewportHeight);
+	float3 Up = SceneTexture.Sample(PointSample, offsetUV).rgb;
 
-	// Sample texture at new position (centre UV + rotated UV offset)
-    float3 outputColour = SceneTexture.Sample( PointSample, centreUV + rotatedOffsetUV/*FILTER - not 0, read the comment*/ ).rgb;
+	offsetUV = input.uv + float2(1 / gViewportWidth, 1 / gViewportHeight);
+	float3 TopRight = SceneTexture.Sample(PointSample, offsetUV).rgb;
+	offsetUV = input.uv + float2(-1 / gViewportWidth, 1 / gViewportHeight);
+	float3 TopLeft = SceneTexture.Sample(PointSample, offsetUV).rgb;
+	offsetUV = input.uv + float2(1 / gViewportWidth, -1 / gViewportHeight);
+	float3 BottomRight = SceneTexture.Sample(PointSample, offsetUV).rgb;
+	offsetUV = input.uv + float2(-1 / gViewportWidth, -1 / gViewportHeight);
+	float3 BottomLeft = SceneTexture.Sample(PointSample, offsetUV).rgb;
 
-	return float4(outputColour, 0.1f);
+
+	float3 finalColour = (Right + Left + Down + Up + BottomLeft + BottomRight + TopLeft + TopRight + colour1) / 9;
+
+	return float4(finalColour, 1);
 }
