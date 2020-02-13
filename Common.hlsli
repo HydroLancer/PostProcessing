@@ -41,7 +41,7 @@ struct LightingPixelShaderInput
 struct SimplePixelShaderInput
 {
     float4 projectedPosition : SV_Position;
-    float2 uv : uv;
+    float2 uv                : uv;
 };
 
 
@@ -49,11 +49,12 @@ struct SimplePixelShaderInput
 //**************************
 
 // The vertex data received by each post-process shader. Just the 2d projected position (pixel coordinate on screen), 
-// and UV for accessing the texture showing the scene
+// and two sets of UVs - one for accessing the texture showing the scene, one refering to the area being affected (see the 2DQuad_pp.hlsl file for diagram & details)
 struct PostProcessingInput
 {
-	float4 projectedPosition : SV_Position;
-	float2 uv                : uv;
+	float4 projectedPosition     : SV_Position;
+	noperspective float2 sceneUV : sceneUV;      // "noperspective" is needed for polygon processing or the sampling of the scene texture doesn't work correctly (ask tutor if you are interested)
+	float2 areaUV                : areaUV;
 };
 
 //**************************
@@ -91,7 +92,7 @@ cbuffer PerFrameConstants : register(b0) // The b0 gives this constant buffer th
     float    gSpecularPower;
 
     float3   gCameraPosition;
-	float    gFrameTime;      // This app does updates on the GPU so we pass over the frame update time
+    float    padding3;
 }
 // Note constant buffers are not structs: we don't use the name of the constant buffer, these are really just a collection of global variables (hence the 'g')
 
@@ -121,9 +122,16 @@ cbuffer PerModelConstants : register(b1) // The b1 gives this constant buffer th
 // Note that this buffer reuses the same index (register) as the per-model buffer above since they won't be used together
 cbuffer PostProcessingConstants : register(b1) 
 {
+	float2 gArea2DTopLeft; // Top-left of post-process area on screen, provided as coordinate from 0.0->1.0 not as a pixel coordinate
+	float2 gArea2DSize;    // Size of post-process area on screen, provided as sizes from 0.0->1.0 (1 = full screen) not as a size in pixels
+	float  gArea2DDepth;   // Depth buffer value for area (0.0 nearest to 1.0 furthest). Full screen post-processing uses 0.0f
+	float3 paddingA;       // Pad things to collections of 4 floats (see notes in earlier labs to read about padding)
+
+  	float4 gPolygon2DPoints[4]; // Four points of a polygon in 2D viewport space for polygon post-processing. Matrix transformations already done on C++ side
+
 	// Tint post-process settings
 	float3 gTintColour;
-	float  paddingA;  // Pad things to collections of 4 floats (see notes in earlier labs to read about padding)
+	float  paddingB;
 
 	// Grey noise post-process settings
     float2 gNoiseScale;
@@ -141,6 +149,9 @@ cbuffer PostProcessingConstants : register(b1)
 	float  gSpiralLevel;
 	float3 paddingE;
 
+	// Heat haze post-process settings
+	float  gHeatHazeTimer;
+	float3 paddingF;
 }
 
 //**************************

@@ -34,11 +34,11 @@ public:
 	}
 	
     // Construct using a pointer to three floats
-    CVector3(const float* pfElts)
+    CVector3(const float* elts)
     {
-        x = pfElts[0];
-        y = pfElts[1];
-        z = pfElts[2];
+        x = elts[0];
+        y = elts[1];
+        z = elts[2];
     }
 
 
@@ -59,7 +59,10 @@ public:
     CVector3& operator+ ();
 
     // Multiply vector by scalar (scales vector);
-    CVector3& operator*= (const float s);
+    CVector3& operator*= (float s);
+
+	// Divide vector by scalar (scales vector);
+    CVector3& operator/= (float s);
 };
 	
 
@@ -73,9 +76,11 @@ CVector3 operator+ (const CVector3& v, const CVector3& w);
 // Vector-vector subtraction
 CVector3 operator- (const CVector3& v, const CVector3& w);
 
-// Vector-scalar multiplication
+// Vector-scalar multiplication & division
 CVector3 operator* (const CVector3& v, float s);
 CVector3 operator* (float s, const CVector3& v);
+CVector3 operator/ (const CVector3& v, float s);
+
 
 /*-----------------------------------------------------------------------------------------
     Non-member functions

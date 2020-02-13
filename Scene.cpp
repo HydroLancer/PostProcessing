@@ -19,6 +19,7 @@
 #include "GraphicsHelpers.h" // Helper functions to unclutter the code here
 #include "ColourRGBA.h" 
 
+#include <array>
 #include <sstream>
 #include <memory>
 
@@ -32,14 +33,24 @@
 enum class PostProcess
 {
 	None,
+	Copy,
 	Tint,
 	GreyNoise,
 	Burn,
 	Distort,
 	Spiral,
+	HeatHaze,
 };
 
-auto gCurrentPostProcess = PostProcess::None;
+enum class PostProcessMode
+{
+	Fullscreen,
+	Area,
+	Polygon,
+};
+
+auto gCurrentPostProcess     = PostProcess::None;
+auto gCurrentPostProcessMode = PostProcessMode::Fullscreen;
 
 //********************
 
@@ -309,12 +320,12 @@ bool InitScene()
 	gLights[0].colour = { 0.8f, 0.8f, 1.0f };
 	gLights[0].strength = 10;
 	gLights[0].model->SetPosition({ 30, 10, 0 });
-	gLights[0].model->SetScale(pow(gLights[0].strength, 0.7f)); // Convert light strength into a nice value for the scale of the light - equation is ad-hoc.
+	gLights[0].model->SetScale(pow(gLights[0].strength, 1.0f)); // Convert light strength into a nice value for the scale of the light - equation is ad-hoc.
 
 	gLights[1].colour = { 1.0f, 0.8f, 0.2f };
 	gLights[1].strength = 40;
 	gLights[1].model->SetPosition({ -70, 30, 100 });
-	gLights[1].model->SetScale(pow(gLights[1].strength, 0.7f));
+	gLights[1].model->SetScale(pow(gLights[1].strength, 1.0f));
 
 
 	////--------------- Set up camera ---------------////
@@ -465,125 +476,223 @@ void RenderSceneFromCamera(Camera* camera)
 		gPerModelConstants.objectColour = gLights[i].colour; // Set any per-model constants apart from the world matrix just before calling render (light colour here)
 		gLights[i].model->Render();
 	}
-
-
-
-
 }
+
+
 
 //**************************
 
-// Run any scene post-processing steps
-void PostProcessing(float frameTime)
+// Select the appropriate shader plus any additional textures required for a given post-process
+// Helper function shared by full-screen, area and polygon post-processing functions below
+void SelectPostProcessShaderAndTextures(PostProcess postProcess)
 {
-
-	// Select the back buffer to use for rendering. Not going to clear the back-buffer because we're going to overwrite it all
-	gD3DContext->OMSetRenderTargets(1, &gBackBufferRenderTarget/*MISSING, 2nd pass specify back buffer as render target (note: needs an &)*/, gDepthStencil);
-
-	
-	// Give the pixel shader (post-processing shader) access to the scene texture 
-	gD3DContext->PSSetShaderResources(0, 1, &gSceneTextureSRV/* MISSING select the scene texture shader resource view (note: needs an &)*/ );
-	gD3DContext->PSSetSamplers(0, 1, &gPointSampler); // Use point sampling (no bilinear, trilinear, mip-mapping etc. for most post-processes)
-
-
-	// Using special vertex shader than creates its own data for a full screen quad
-	gD3DContext->VSSetShader(gFullScreenQuadVertexShader, nullptr, 0);
-	gD3DContext->GSSetShader(nullptr, nullptr, 0);  // Switch off geometry shader when not using it (pass nullptr for first parameter)
-
-
-	// States - no blending, ignore depth buffer and culling
-	gD3DContext->OMSetBlendState(gAlphaBlendingState, nullptr, 0xffffff);
-	gD3DContext->OMSetDepthStencilState(gNoDepthBufferState, 0);
-	gD3DContext->RSSetState(gCullNoneState);
-
-
-	// No need to set vertex/index buffer (see fullscreen quad vertex shader), just indicate that the quad will be created as a triangle strip
-	gD3DContext->IASetInputLayout(NULL); // No vertex data
-	gD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-
-	
-	// Prepare custom settings for current post-process
-	if (gCurrentPostProcess == PostProcess::Tint)
+	if (postProcess == PostProcess::Copy)
 	{
-		gD3DContext->PSSetShader(gTintPostProcess, nullptr, 0);
-		gPostProcessingConstants.tintColour = { 1, 0, 0 };
+		gD3DContext->PSSetShader(gCopyPostProcess, nullptr, 0);
 	}
 
+	else if (postProcess == PostProcess::Tint)
+	{
+		gD3DContext->PSSetShader(gTintPostProcess, nullptr, 0);
+	}
 
-	else if (gCurrentPostProcess == PostProcess::GreyNoise)
+	else if (postProcess == PostProcess::GreyNoise)
 	{
 		gD3DContext->PSSetShader(gGreyNoisePostProcess, nullptr, 0);
-
-		// Noise scaling adjusts how fine the noise is.
-		const float grainSize = 140; // Fineness of the noise grain
-		gPostProcessingConstants.noiseScale  = { gViewportWidth / grainSize, gViewportHeight / grainSize };
-
-		// The noise offset is randomised to give a constantly changing noise effect (like tv static)
-		gPostProcessingConstants.noiseOffset = { Random(0.0f, 1.0f), Random(0.0f, 1.0f) };
 
 		// Give pixel shader access to the noise texture
 		gD3DContext->PSSetShaderResources(1, 1, &gNoiseMapSRV);
 		gD3DContext->PSSetSamplers(1, 1, &gTrilinearSampler);
 	}
 
-
-	else if (gCurrentPostProcess == PostProcess::Burn)
+	else if (postProcess == PostProcess::Burn)
 	{
 		gD3DContext->PSSetShader(gBurnPostProcess, nullptr, 0);
-
-		// Set and increase the burn level (cycling back to 0 when it reaches 1.0f)
-		const float burnSpeed = 0.2f;
-		gPostProcessingConstants.burnHeight = fmod(gPostProcessingConstants.burnHeight + burnSpeed * frameTime, 1.0f);
 
 		// Give pixel shader access to the burn texture (basically a height map that the burn level ascends)
 		gD3DContext->PSSetShaderResources(1, 1, &gBurnMapSRV);
 		gD3DContext->PSSetSamplers(1, 1, &gTrilinearSampler);
 	}
 
-
-	else if (gCurrentPostProcess == PostProcess::Distort)
+	else if (postProcess == PostProcess::Distort)
 	{
 		gD3DContext->PSSetShader(gDistortPostProcess, nullptr, 0);
-
-		// Set the level of distortion
-		gPostProcessingConstants.distortLevel = 0.03f;
 
 		// Give pixel shader access to the distortion texture (containts 2D vectors (in R & G) to shift the texture UVs to give a cut-glass impression)
 		gD3DContext->PSSetShaderResources(1, 1, &gDistortMapSRV);
 		gD3DContext->PSSetSamplers(1, 1, &gTrilinearSampler);
 	}
 
-
-	else if (gCurrentPostProcess == PostProcess::Spiral)
+	else if (postProcess == PostProcess::Spiral)
 	{
 		gD3DContext->PSSetShader(gSpiralPostProcess, nullptr, 0);
-
-		static float wiggle = 0.0f;
-		const float wiggleSpeed = 1.0f;
-
-		// Set and increase the amount of spiral - use a tweaked cos wave to animate
-		gPostProcessingConstants.spiralLevel = ((1.0f - cos(wiggle)) * 4.0f );
-		wiggle += wiggleSpeed * frameTime;
 	}
 
+	else if (postProcess == PostProcess::HeatHaze)
+	{
+		gD3DContext->PSSetShader(gHeatHazePostProcess, nullptr, 0);
+	}
+}
+
+
+
+// Perform a full-screen post process from "scene texture" to back buffer
+void FullScreenPostProcess(PostProcess postProcess)
+{
+	// Select the back buffer to use for rendering. Not going to clear the back-buffer because we're going to overwrite it all
+	gD3DContext->OMSetRenderTargets(1, &gBackBufferRenderTarget, gDepthStencil);
+
+	
+	// Give the pixel shader (post-processing shader) access to the scene texture 
+	gD3DContext->PSSetShaderResources(0, 1, &gSceneTextureSRV);
+	gD3DContext->PSSetSamplers(0, 1, &gPointSampler); // Use point sampling (no bilinear, trilinear, mip-mapping etc. for most post-processes)
+
+
+	// Using special vertex shader that creates its own data for a 2D screen quad
+	gD3DContext->VSSetShader(g2DQuadVertexShader, nullptr, 0);
+	gD3DContext->GSSetShader(nullptr, nullptr, 0);  // Switch off geometry shader when not using it (pass nullptr for first parameter)
+
+
+	// States - no blending, don't write to depth buffer and ignore back-face culling
+	gD3DContext->OMSetBlendState(gNoBlendingState, nullptr, 0xffffff);
+	gD3DContext->OMSetDepthStencilState(gDepthReadOnlyState, 0);
+	gD3DContext->RSSetState(gCullNoneState);
+
+
+	// No need to set vertex/index buffer (see 2D quad vertex shader), just indicate that the quad will be created as a triangle strip
+	gD3DContext->IASetInputLayout(NULL); // No vertex data
+	gD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+
+	// Select shader and textures needed for the required post-processes (helper function above)
+	SelectPostProcessShaderAndTextures(postProcess);
+
+
+	// Set 2D area for full-screen post-processing (coordinates in 0->1 range)
+	gPostProcessingConstants.area2DTopLeft = { 0, 0 }; // Top-left of entire screen
+	gPostProcessingConstants.area2DSize    = { 1, 1 }; // Full size of screen
+	gPostProcessingConstants.area2DDepth   = 0;        // Depth buffer value for full screen is as close as possible
+
+
+	// Pass over the above post-processing settings (also the per-process settings prepared in UpdateScene function below)
 	UpdateConstantBuffer(gPostProcessingConstantBuffer, gPostProcessingConstants);
+	gD3DContext->VSSetConstantBuffers(1, 1, &gPostProcessingConstantBuffer);
 	gD3DContext->PSSetConstantBuffers(1, 1, &gPostProcessingConstantBuffer);
 
+
 	// Draw a quad
-	gD3DContext->Draw(4 /*MISSING - Post-process pass renderes a quad*/, 0);
-
-
-	// These lines unbind the scene texture from the pixel shader to stop DirectX issuing a warning when we try to render to it again next frame
-	ID3D11ShaderResourceView* nullSRV = nullptr;
-	gD3DContext->PSSetShaderResources(0, 1, &nullSRV);
+	gD3DContext->Draw(4, 0);
 }
+
+
+// Perform an area post process from "scene texture" to back buffer at a given point in the world, with a given size (world units)
+void AreaPostProcess(PostProcess postProcess, CVector3 worldPoint, CVector2 areaSize)
+{
+	// First perform a full-screen copy of the scene to back-buffer
+	FullScreenPostProcess(PostProcess::Copy);
+	
+
+	// Now perform a post-process of a portion of the scene to the back-buffer (overwriting some of the copy above)
+	// Note: The following code relies on many of the settings that were prepared in the FullScreenPostProcess call above, it only
+	//       updates a few things that need to be changed for an area process. If you tinker with the code structure you need to be
+	//       aware of all the work that the above function did that was also preparation for this post-process area step
+
+	// Select shader/textures needed for required post-process
+	SelectPostProcessShaderAndTextures(postProcess);
+
+	// Enable alpha blending - area effects need to fade out at the edges or the hard edge of the area is visible
+	// A couple of the shaders have been updated to put the effect into a soft circle
+	// Alpha blending isn't enabled for fullscreen and polygon effects so it doesn't affect those (except heat-haze, which works a bit differently)
+	gD3DContext->OMSetBlendState(gAlphaBlendingState, nullptr, 0xffffff);
+
+
+	// Use picking methods to find the 2D position of the 3D point at the centre of the area effect
+	auto worldPointTo2D = gCamera->PixelFromWorldPt(worldPoint, gViewportWidth, gViewportHeight);
+	CVector2 area2DCentre = { worldPointTo2D.x, worldPointTo2D.y };
+	float areaDistance = worldPointTo2D.z;
+	
+	// Nothing to do if given 3D point is behind the camera
+	if (areaDistance < gCamera->NearClip())  return;
+	
+	// Convert pixel coordinates to 0->1 coordinates as used by the shader
+	area2DCentre.x /= gViewportWidth;
+	area2DCentre.y /= gViewportHeight;
+
+
+
+	// Using new helper function here - it calculates the world space units covered by a pixel at a certain distance from the camera.
+	// Use this to find the size of the 2D area we need to cover the world space size requested
+	CVector2 pixelSizeAtPoint = gCamera->PixelSizeInWorldSpace(areaDistance, gViewportWidth, gViewportHeight);
+	CVector2 area2DSize = { areaSize.x / pixelSizeAtPoint.x, areaSize.y / pixelSizeAtPoint.y };
+
+	// Again convert the result in pixels to a result to 0->1 coordinates
+	area2DSize.x /= gViewportWidth;
+	area2DSize.y /= gViewportHeight;
+
+
+
+	// Send the area top-left and size into the constant buffer - the 2DQuad vertex shader will use this to create a quad in the right place
+	gPostProcessingConstants.area2DTopLeft = area2DCentre - 0.5f * area2DSize; // Top-left of area is centre - half the size
+	gPostProcessingConstants.area2DSize = area2DSize;
+
+	// Manually calculate depth buffer value from Z distance to the 3D point and camera near/far clip values. Result is 0->1 depth value
+	// We've never seen this full calculation before, it's occasionally useful. It is derived from the material in the Picking lecture
+	// Having the depth allows us to have area effects behind normal objects
+	gPostProcessingConstants.area2DDepth = gCamera->FarClip() * (areaDistance - gCamera->NearClip()) / (gCamera->FarClip() - gCamera->NearClip());
+	gPostProcessingConstants.area2DDepth /= areaDistance;
+
+	// Pass over this post-processing area to shaders (also sends the per-process settings prepared in UpdateScene function below)
+	UpdateConstantBuffer(gPostProcessingConstantBuffer, gPostProcessingConstants);
+	gD3DContext->VSSetConstantBuffers(1, 1, &gPostProcessingConstantBuffer);
+	gD3DContext->PSSetConstantBuffers(1, 1, &gPostProcessingConstantBuffer);
+
+
+	// Draw a quad
+	gD3DContext->Draw(4, 0);
+}
+
+
+// Perform an post process from "scene texture" to back buffer within the given four-point polygon and a world matrix to position/rotate/scale the polygon
+void PolygonPostProcess(PostProcess postProcess, const std::array<CVector3, 4>& points, const CMatrix4x4& worldMatrix)
+{
+	// First perform a full-screen copy of the scene to back-buffer
+	FullScreenPostProcess(PostProcess::Copy);
+
+
+	// Now perform a post-process of a portion of the scene to the back-buffer (overwriting some of the copy above)
+	// Note: The following code relies on many of the settings that were prepared in the FullScreenPostProcess call above, it only
+	//       updates a few things that need to be changed for an area process. If you tinker with the code structure you need to be
+	//       aware of all the work that the above function did that was also preparation for this post-process area step
+
+	// Select shader/textures needed for required post-process
+	SelectPostProcessShaderAndTextures(postProcess);
+
+	// Loop through the given points, transform each to 2D (this is what the vertex shader normally does in most labs)
+	for (unsigned int i = 0; i < points.size(); ++i)
+	{
+		CVector4 modelPosition = CVector4(points[i], 1);
+		CVector4 worldPosition = modelPosition * worldMatrix;
+		CVector4 viewportPosition = worldPosition * gCamera->ViewProjectionMatrix();
+
+		gPostProcessingConstants.polygon2DPoints[i] = viewportPosition;
+	}
+
+	// Pass over the polygon points to the shaders (also sends the per-process settings prepared in UpdateScene function below)
+	UpdateConstantBuffer(gPostProcessingConstantBuffer, gPostProcessingConstants);
+	gD3DContext->VSSetConstantBuffers(1, 1, &gPostProcessingConstantBuffer);
+	gD3DContext->PSSetConstantBuffers(1, 1, &gPostProcessingConstantBuffer);
+
+	// Select the special 2D polygon post-processing vertex shader and draw the polygon
+	gD3DContext->VSSetShader(g2DPolygonVertexShader, nullptr, 0);
+	gD3DContext->Draw(4, 0);
+}
+
 
 //**************************
 
 
-
 // Rendering the scene
-void RenderScene(float frameTime)
+void RenderScene()
 {
 	//// Common settings ////
 
@@ -601,8 +710,6 @@ void RenderScene(float frameTime)
 	gPerFrameConstants.viewportWidth  = static_cast<float>(gViewportWidth);
 	gPerFrameConstants.viewportHeight = static_cast<float>(gViewportHeight);
 
-	gPerFrameConstants.frameTime = frameTime;
-
 
 
 	////--------------- Main scene rendering ---------------////
@@ -612,7 +719,7 @@ void RenderScene(float frameTime)
 	// Also clear the render target to a fixed colour and the depth buffer to the far distance
 	if (gCurrentPostProcess != PostProcess::None)
 	{
-		gD3DContext->OMSetRenderTargets(1, &gSceneRenderTarget/*MISSING select scene texture as render target (note: needs &)*/, gDepthStencil);
+		gD3DContext->OMSetRenderTargets(1, &gSceneRenderTarget, gDepthStencil);
 		gD3DContext->ClearRenderTargetView(gSceneRenderTarget, &gBackgroundColor.r);
 	}
 	else
@@ -639,7 +746,37 @@ void RenderScene(float frameTime)
 	////--------------- Scene completion ---------------////
 
 	// Run any post-processing steps
-	if (gCurrentPostProcess != PostProcess::None)  PostProcessing(frameTime);
+	if (gCurrentPostProcess != PostProcess::None)
+	{
+		if (gCurrentPostProcessMode == PostProcessMode::Fullscreen)
+		{
+			FullScreenPostProcess(gCurrentPostProcess);
+		}
+
+		else if (gCurrentPostProcessMode == PostProcessMode::Area)
+		{
+			// Pass a 3D point for the centre of the affected area and the size of the (rectangular) area in world units
+			AreaPostProcess(gCurrentPostProcess, gLights[0].model->Position(), { 10, 10 });
+		}
+
+		else if (gCurrentPostProcessMode == PostProcessMode::Polygon)
+		{
+			// An array of four points in world space - a tapered square centred at the origin
+			const std::array<CVector3, 4> points = {{ {-3,5,0}, {-5,-5,0}, {3,5,0}, {5,-5,0} }}; // C++ strangely needs an extra pair of {} here... only for std:array...
+
+			// A rotating matrix placing the model above in the scene
+			static CMatrix4x4 polyMatrix = MatrixTranslation({ 20, 15, 0 });
+			polyMatrix = MatrixRotationY(ToRadians(1)) * polyMatrix;
+			
+			// Pass an array of 4 points and a matrix. Only supports 4 points.
+			PolygonPostProcess(gCurrentPostProcess, points, polyMatrix);
+
+		}
+
+		// These lines unbind the scene texture from the pixel shader to stop DirectX issuing a warning when we try to render to it again next frame
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		gD3DContext->PSSetShaderResources(0, 1, &nullSRV);
+	}
 
 	// When drawing to the off-screen back buffer is complete, we "present" the image to the front buffer (the screen)
 	// Set first parameter to 1 to lock to vsync
@@ -655,13 +792,52 @@ void RenderScene(float frameTime)
 // Update models and camera. frameTime is the time passed since the last frame
 void UpdateScene(float frameTime)
 {
+	//***********
+
 	// Select post process on keys
-	if (KeyHit(Key_1))  gCurrentPostProcess = PostProcess::Tint;
-	if (KeyHit(Key_2))  gCurrentPostProcess = PostProcess::GreyNoise;
-	if (KeyHit(Key_3))  gCurrentPostProcess = PostProcess::Burn;
-	if (KeyHit(Key_4))  gCurrentPostProcess = PostProcess::Distort;
-	if (KeyHit(Key_5))  gCurrentPostProcess = PostProcess::Spiral;
-	if (KeyHit(Key_0))  gCurrentPostProcess = PostProcess::None;
+	if (KeyHit(Key_F1))  gCurrentPostProcessMode = PostProcessMode::Fullscreen;
+	if (KeyHit(Key_F2))  gCurrentPostProcessMode = PostProcessMode::Area;
+	if (KeyHit(Key_F3))  gCurrentPostProcessMode = PostProcessMode::Polygon;
+
+	if (KeyHit(Key_1))   gCurrentPostProcess = PostProcess::Tint;
+	if (KeyHit(Key_2))   gCurrentPostProcess = PostProcess::GreyNoise;
+	if (KeyHit(Key_3))   gCurrentPostProcess = PostProcess::Burn;
+	if (KeyHit(Key_4))   gCurrentPostProcess = PostProcess::Distort;
+	if (KeyHit(Key_5))   gCurrentPostProcess = PostProcess::Spiral;
+	if (KeyHit(Key_6))   gCurrentPostProcess = PostProcess::HeatHaze;
+	if (KeyHit(Key_9))   gCurrentPostProcess = PostProcess::Copy;
+	if (KeyHit(Key_0))   gCurrentPostProcess = PostProcess::None;
+
+	// Post processing settings - all data for post-processes is updated every frame whether in use or not (minimal cost)
+	
+	// Colour for tint shader
+	gPostProcessingConstants.tintColour = { 1, 0, 0 };
+
+	// Noise scaling adjusts how fine the grey noise is.
+	const float grainSize = 140; // Fineness of the noise grain
+	gPostProcessingConstants.noiseScale  = { gViewportWidth / grainSize, gViewportHeight / grainSize };
+
+	// The noise offset is randomised to give a constantly changing noise effect (like tv static)
+	gPostProcessingConstants.noiseOffset = { Random(0.0f, 1.0f), Random(0.0f, 1.0f) };
+
+	// Set and increase the burn level (cycling back to 0 when it reaches 1.0f)
+	const float burnSpeed = 0.2f;
+	gPostProcessingConstants.burnHeight = fmod(gPostProcessingConstants.burnHeight + burnSpeed * frameTime, 1.0f);
+
+	// Set the level of distortion
+	gPostProcessingConstants.distortLevel = 0.03f;
+
+	// Set and increase the amount of spiral - use a tweaked cos wave to animate
+	static float wiggle = 0.0f;
+	const float wiggleSpeed = 1.0f;
+	gPostProcessingConstants.spiralLevel = ((1.0f - cos(wiggle)) * 4.0f );
+	wiggle += wiggleSpeed * frameTime;
+
+	// Update heat haze timer
+	gPostProcessingConstants.heatHazeTimer += frameTime;
+
+	//***********
+
 
 	// Orbit one light - a bit of a cheat with the static variable [ask the tutor if you want to know what this is]
 	static float lightRotate = 0.0f;
@@ -689,7 +865,7 @@ void UpdateScene(float frameTime)
 		std::ostringstream frameTimeMs;
 		frameTimeMs.precision(2);
 		frameTimeMs << std::fixed << avgFrameTime * 1000;
-		std::string windowTitle = "CO3303 Week 13: Full Screen Post Processing - Frame Time: " + frameTimeMs.str() +
+		std::string windowTitle = "CO3303 Week 14: Area Post Processing - Frame Time: " + frameTimeMs.str() +
 			"ms, FPS: " + std::to_string(static_cast<int>(1 / avgFrameTime + 0.5f));
 		SetWindowTextA(gHWnd, windowTitle.c_str());
 		totalFrameTime = 0;

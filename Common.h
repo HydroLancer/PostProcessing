@@ -79,7 +79,7 @@ struct PerFrameConstants
     float      specularPower;
 
     CVector3   cameraPosition;
-	float      frameTime;      // This app does updates on the GPU so we pass over the frame update time
+	float      padding3;
 };
 
 extern PerFrameConstants gPerFrameConstants;      // This variable holds the CPU-side constant buffer described above
@@ -111,9 +111,16 @@ extern ID3D11Buffer*     gPerModelConstantBuffer; // This variable controls the 
 // Settings used by post-processes - must match the similar structure in the Common.hlsli shader file
 struct PostProcessingConstants
 {
+	CVector2 area2DTopLeft; // Top-left of post-process area on screen, provided as coordinate from 0.0->1.0 not as a pixel coordinate
+	CVector2 area2DSize;    // Size of post-process area on screen, provided as sizes from 0.0->1.0 (1 = full screen) not as a size in pixels
+	float    area2DDepth;   // Depth buffer value for area (0.0 nearest to 1.0 furthest). Full screen post-processing uses 0.0f
+	CVector3 paddingA;      // Pad things to collections of 4 floats (see notes in earlier labs to read about padding)
+
+	CVector4 polygon2DPoints[4]; // Four points of a polygon in 2D viewport space for polygon post-processing. Matrix transformations already done on C++ side
+
 	// Tint post-process settings
 	CVector3 tintColour;
-	float    paddingA;  // Pad things to collections of 4 floats (see notes in earlier labs to read about padding)
+	float    paddingB;
 
 	// Grey noise post-process settings
     CVector2 noiseScale;
@@ -130,6 +137,10 @@ struct PostProcessingConstants
 	// Spiral post-process settings
 	float    spiralLevel;
 	CVector3 paddingE;
+
+	// Heat haze post-process settings
+	float    heatHazeTimer;
+	CVector3 paddingF;
 };
 extern PostProcessingConstants gPostProcessingConstants;      // This variable holds the CPU-side constant buffer described above
 extern ID3D11Buffer*           gPostProcessingConstantBuffer; // This variable controls the GPU-side constant buffer related to the above structure

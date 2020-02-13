@@ -40,17 +40,41 @@ CVector2& CVector2::operator+ ()
     return *this;
 }
 
+// Multiply vector by scalar (scales vector);
+CVector2& CVector2::operator*= (float s)
+{
+    x *= s;
+    y *= s;
+    return *this;
+}
+
 
 // Vector-vector addition
 CVector2 operator+ (const CVector2& v, const CVector2& w)
 {
-    return CVector2{ v.x + w.x, v.y + w.y };
+    return { v.x + w.x, v.y + w.y };
 }
 
 // Vector-vector subtraction
 CVector2 operator- (const CVector2& v, const CVector2& w)
 {
-    return CVector2{ v.x - w.x, v.y - w.y };
+    return { v.x - w.x, v.y - w.y };
+}
+
+// Vector-scalar multiplication
+CVector2 operator* (const CVector2& v, float s)
+{
+    return { v.x * s, v.y * s };
+}
+CVector2 operator* (float s, const CVector2& v)
+{
+    return { v.x * s, v.y * s };
+}
+
+// Vector-scalar division
+CVector2 operator/ (const CVector2& v, float s)
+{
+    return { v.x / s, v.y / s };
 }
 
 
@@ -72,11 +96,11 @@ CVector2 Normalise(const CVector2& v)
     // Ensure vector is not zero length (use function from MathHelpersh.h to check if float is approximately 0)
     if (IsZero(lengthSq))
     {
-        return CVector2{ 0.0f, 0.0f };
+        return { 0.0f, 0.0f };
     }
     else
     {
         float invLength = InvSqrt(lengthSq);
-        return CVector2{ v.x * invLength, v.y * invLength };
+        return { v.x * invLength, v.y * invLength };
     }
 }

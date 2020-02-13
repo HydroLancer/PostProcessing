@@ -36,7 +36,7 @@ float4 main(PostProcessingInput input) : SV_Target
 	const float crinkle = 0.15f; // Amount of texture crinkle at the edges 
 
 	// Get burn texture colour
-    float4 burnTexture = BurnMap.Sample( TrilinearWrap, input.uv );
+    float4 burnTexture = BurnMap.Sample( TrilinearWrap, input.areaUV );
     
     // The range of burning colours are from gBurnLevel  to burnLevelMax
 	float burnLevelMax = gBurnHeight + glowAmount; 
@@ -52,7 +52,7 @@ float4 main(PostProcessingInput input) : SV_Target
     // Output scene texture untouched when current burnTexture texture value above burning range
 	else if (burnTexture.r >= burnLevelMax)
     {
-		outputColour = SceneTexture.Sample(PointSample, input.uv).rgb;/*FILTER, not 0, read the comment and refer to earlier post-processing shaders for code required*/
+		outputColour = SceneTexture.Sample( PointSample, input.sceneUV ).rgb;
 	}
 	
 	else // Draw burning edges
@@ -62,13 +62,13 @@ float4 main(PostProcessingInput input) : SV_Target
 		float glowLevel = 1.0f - (burnTexture.r - gBurnHeight) / glowAmount;
 
 		// Extract direction to crinkle (2D vector) from the g & b components of the burn texture sampled above
-		float2 crinkleVector = burnTexture.gb/*FILTER, not 0, read the comment*/;
+		float2 crinkleVector = burnTexture.gb;
 		
 		// Convert from UV 0->1 range to -0.5->0.5 range (to give vector in any direction)
 		crinkleVector -= float2(0.5f, 0.5f);;
 
 		// Get main texture colour using crinkle offset
-	    float3 texColour =  SceneTexture.Sample( PointSample, input.uv - glowLevel * crinkle * crinkleVector ).rgb;
+	    float3 texColour =  SceneTexture.Sample( PointSample, input.sceneUV - glowLevel * crinkle * crinkleVector ).rgb;
 
 		// Split glow into two regions - the very edge and the inner section
 		glowLevel *= 2.0f;
@@ -84,5 +84,5 @@ float4 main(PostProcessingInput input) : SV_Target
 		}
 	}
 
-	return float4( outputColour, 0.1f );
+	return float4( outputColour, 1.0f );
 }

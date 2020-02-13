@@ -7,6 +7,7 @@
 #define _CMATRIX4X4_H_DEFINED_
 
 #include "CVector3.h"
+#include "CVector4.h"
 #include <cmath>
 
 
@@ -46,8 +47,14 @@ public:
     CVector3 GetEulerAngles();
     CVector3 GetScale() const  { return { Length(GetXAxis()), Length(GetYAxis()) , Length(GetZAxis()) }; }
 
-    // Post-multiply this matrix by the given one
+    
+	// Post-multiply this matrix by the given one
     CMatrix4x4& operator*=(const CMatrix4x4& m);
+
+	// Return the given CVector4 transformed by this matrix
+	CVector4 operator*=(const CVector4& v);
+
+
 
     // Make this matrix an affine 3D transformation matrix to face from current position to given
     // target (in the Z direction). Can pass up vector for the constructed matrix and specify
@@ -63,11 +70,14 @@ public:
 
 
 /*-----------------------------------------------------------------------------------------
-    Operators
+    Non-member Operators
 -----------------------------------------------------------------------------------------*/
 
 // Matrix-matrix multiplication
 CMatrix4x4 operator*(const CMatrix4x4& m1, const CMatrix4x4& m2);
+
+// Return the given CVector4 transformed by the given matrix
+CVector4 operator*(const CVector4& v, const CMatrix4x4& m);
 
 
 /*-----------------------------------------------------------------------------------------

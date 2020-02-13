@@ -3,6 +3,7 @@
 //--------------------------------------------------------------------------------------
 // Holds position, rotation, near/far clip and field of view. These to a view and projection matrices as required
 
+#include "CVector2.h"
 #include "CVector3.h"
 #include "CMatrix4x4.h"
 #include "MathHelpers.h"
@@ -56,7 +57,24 @@ public:
 	CMatrix4x4 ProjectionMatrix()      { UpdateMatrices(); return mProjectionMatrix;     }
 	CMatrix4x4 ViewProjectionMatrix()  { UpdateMatrices(); return mViewProjectionMatrix; }
 
+
+	//-------------------------------------
+	// Camera Picking
+	//-------------------------------------
+	// Convert 2D pixel positions to and from 3D world positions
+
+	// Return pixel coordinates corresponding to given world point when viewing from this
+	// camera. Pass the viewport width and height. The returned CVector3 contains the pixel
+	// coordinates in x and y and the Z distance to the world point in Z. If the Z distance
+	// is less than the camera near clip (use NearClip() member function), then the world
+	// point is behind the camera and the 2D x and y coordinates are to be ignored.
+	CVector3 PixelFromWorldPt(CVector3 worldPoint, unsigned int viewportWidth, unsigned int viewportHeight);
 	
+	// Return the size of a pixel in world space at the given Z distance. Allows us to convert the 2D size of areas on the screen to actualy sizes in the world
+	// Pass the viewport width and height
+	CVector2 PixelSizeInWorldSpace(float Z, unsigned int viewportWidth, unsigned int viewportHeight);
+
+
 //-------------------------------------
 // Private members
 //-------------------------------------

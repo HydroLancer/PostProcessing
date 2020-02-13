@@ -77,8 +77,22 @@ CMatrix4x4& CMatrix4x4::operator*=(const CMatrix4x4& m)
 }
 
 
+// Return the given CVector4 transformed by this matrix
+CVector4 CMatrix4x4::operator*=(const CVector4& v)
+{
+    CVector4 vOut;
+
+	vOut.x = v.x * e00 + v.y * e10 + v.z * e20 + v.w * e30;
+	vOut.y = v.x * e01 + v.y * e11 + v.z * e21 + v.w * e31;
+	vOut.z = v.x * e02 + v.y * e12 + v.z * e22 + v.w * e32;
+	vOut.w = v.x * e03 + v.y * e13 + v.z * e23 + v.w * e33;
+
+	return vOut;
+}
+
+
 /*-----------------------------------------------------------------------------------------
-    Operators
+    Non-member Operators
 -----------------------------------------------------------------------------------------*/
 
 // Matrix-matrix multiplication
@@ -109,6 +123,18 @@ CMatrix4x4 operator*(const CMatrix4x4& m1, const CMatrix4x4& m2)
     return mOut;
 }
 
+// Return the given CVector4 transformed by the given matrix
+CVector4 operator*(const CVector4& v, const CMatrix4x4& m)
+{
+    CVector4 vOut;
+
+	vOut.x = v.x * m.e00 + v.y * m.e10 + v.z * m.e20 + v.w * m.e30;
+	vOut.y = v.x * m.e01 + v.y * m.e11 + v.z * m.e21 + v.w * m.e31;
+	vOut.z = v.x * m.e02 + v.y * m.e12 + v.z * m.e22 + v.w * m.e32;
+	vOut.w = v.x * m.e03 + v.y * m.e13 + v.z * m.e23 + v.w * m.e33;
+
+	return vOut;
+}
 
 
 /*-----------------------------------------------------------------------------------------
