@@ -38,8 +38,8 @@ enum class PostProcess
 	GreyNoise,
 	Burn,
 	Distort,
-	Spiral,
-	HeatHaze,
+	Blur,
+	Underwater,
 };
 
 enum class PostProcessMode
@@ -523,12 +523,12 @@ void SelectPostProcessShaderAndTextures(PostProcess postProcess)
 		gD3DContext->PSSetSamplers(1, 1, &gTrilinearSampler);
 	}
 
-	else if (postProcess == PostProcess::Spiral)
+	else if (postProcess == PostProcess::Blur)
 	{
 		gD3DContext->PSSetShader(gSpiralPostProcess, nullptr, 0);
 	}
 
-	else if (postProcess == PostProcess::HeatHaze)
+	else if (postProcess == PostProcess::Underwater)
 	{
 		gD3DContext->PSSetShader(gHeatHazePostProcess, nullptr, 0);
 	}
@@ -554,7 +554,7 @@ void FullScreenPostProcess(PostProcess postProcess)
 
 
 	// States - no blending, don't write to depth buffer and ignore back-face culling
-	gD3DContext->OMSetBlendState(gNoBlendingState, nullptr, 0xffffff);
+	gD3DContext->OMSetBlendState(gAlphaBlendingState, nullptr, 0xffffff);
 	gD3DContext->OMSetDepthStencilState(gDepthReadOnlyState, 0);
 	gD3DContext->RSSetState(gCullNoneState);
 
@@ -800,11 +800,11 @@ void UpdateScene(float frameTime)
 	if (KeyHit(Key_F3))  gCurrentPostProcessMode = PostProcessMode::Polygon;
 
 	if (KeyHit(Key_1))   gCurrentPostProcess = PostProcess::Tint;
-	if (KeyHit(Key_2))   gCurrentPostProcess = PostProcess::GreyNoise;
-	if (KeyHit(Key_3))   gCurrentPostProcess = PostProcess::Burn;
-	if (KeyHit(Key_4))   gCurrentPostProcess = PostProcess::Distort;
-	if (KeyHit(Key_5))   gCurrentPostProcess = PostProcess::Spiral;
-	if (KeyHit(Key_6))   gCurrentPostProcess = PostProcess::HeatHaze;
+	if (KeyHit(Key_2))   gCurrentPostProcess = PostProcess::Blur;
+	if (KeyHit(Key_3))   gCurrentPostProcess = PostProcess::Underwater;
+	if (KeyHit(Key_4))   gCurrentPostProcess = PostProcess::GreyNoise;
+	if (KeyHit(Key_5))   gCurrentPostProcess = PostProcess::Distort;
+	if (KeyHit(Key_6))   gCurrentPostProcess = PostProcess::Burn;
 	if (KeyHit(Key_9))   gCurrentPostProcess = PostProcess::Copy;
 	if (KeyHit(Key_0))   gCurrentPostProcess = PostProcess::None;
 

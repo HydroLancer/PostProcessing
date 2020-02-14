@@ -44,8 +44,7 @@ float4 main(PostProcessingInput input) : SV_Target
 	offsetUV = input.areaUV + float2(-1 / gViewportWidth, -1 / gViewportHeight);
 	float3 BottomLeft = SceneTexture.Sample(PointSample, offsetUV).rgb;
 
-
-	float3 finalColour = (Right + Left + Down + Up + BottomLeft + BottomRight + TopLeft + TopRight + colour1) / 9;
-
+	//float3 finalColour = (Right + Left + Down + Up + BottomLeft + BottomRight + TopLeft + TopRight + colour1) / 9;
+	float3 finalColour = (((Right * Left) + (TopRight * BottomLeft) + (TopLeft * BottomRight) + (Up * Down) + colour1) / 2);
 	return float4(finalColour, 1.0f);
 }
